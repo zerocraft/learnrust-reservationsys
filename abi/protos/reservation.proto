@@ -1,0 +1,72 @@
+syntax="proto3";
+package reservation;
+
+import "google/protobuf/timestamp.proto";
+
+enum ReservationStatus{
+    RESERVATION_STATUS_UNKOWN = 0;
+    RESERVATION_STATUS_PENDING = 1;
+    RESERVATION_STATUS_CONFIRMED = 2;
+    RESERVATION_STATUS_BLOCKED = 3;
+}
+
+message Reservation{
+    string id = 1;
+    string uid = 2;
+    string resource_id = 3;
+    string note = 4;
+    google.protobuf.Timestamp start = 5;
+    google.protobuf.Timestamp end = 6;
+    ReservationStatus rstatus = 7;
+}
+
+message ReserveRequest{
+    Reservation reservation = 1;
+}
+
+message ConfirmRequest{
+    string id =1;
+}
+
+message UpdateRequest{
+    Reservation reservation =1;
+}
+
+message CancelRequest{
+    string id =1;
+}
+
+message ActionResponse{
+    bool done =1;
+}
+
+message GetRequest{
+    string id=1;
+}
+
+message QueryRequest{
+    string uid=1;
+}
+
+enum OperateType{
+    OPERATE_TYPE_UNKNOWN = 0;
+    OPERATE_TYPE_CREATE = 1;
+    OPERATE_TYPE_UPDATE = 2;
+    OPERATE_TYPE_DELETE = 3;
+}
+
+message ListenRequest{}
+message ListenResponse{
+    OperateType operate=1;
+    Reservation reservation=2;
+}
+
+service ReservationService{
+    rpc reserve(ReserveRequest) returns (Reservation);//预定
+    rpc confirm(ConfirmRequest) returns (Reservation);//确认
+    rpc update(UpdateRequest) returns (Reservation);//更新
+    rpc cancel(CancelRequest) returns (ActionResponse);//取消
+    rpc get(GetRequest) returns (Reservation);//获取
+    rpc query(QueryRequest) returns (stream Reservation);//查询
+    rpc listen(ListenRequest) returns (stream Reservation);
+}
