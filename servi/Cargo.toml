@@ -6,3 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tonic = { version = "0.10.0", features = ["gzip"] }
+rsys-abi = { version = "0.1.0", path = "../abi" }
+rsys = { version = "0.1.0", path = "../rsys" }
+tokio = { version = "1.32.0", features = ["full"] }
+anyhow = "1.0.75"
+futures = { version = "0.3.28", default-features = false }
+serde = { version = "1.0.188", features = ["derive"] }
+serde_yaml = "0.9.25"

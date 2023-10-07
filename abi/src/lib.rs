@@ -5,6 +5,8 @@ use chrono::{DateTime, Utc};
 pub use pb::*;
 pub use utils::*;
 
+extern crate derive_builder;
+
 impl Reservation {
     pub fn new_pending(
         uid: impl Into<String>,
@@ -33,6 +35,18 @@ impl Reservation {
     }
 }
 
+impl<T: Into<String>> From<T> for ConfirmRequest {
+    fn from(value: T) -> Self {
+        ConfirmRequest { id: value.into() }
+    }
+}
+
+impl From<String> for CancelRequest {
+    fn from(value: String) -> Self {
+        CancelRequest { id: value }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -45,5 +59,15 @@ mod tests {
         println!("parse:{:?}", date);
         let date = parse_datetime(datestr.strip_prefix("2012").unwrap());
         assert_eq!(date, Err(()));
+    }
+
+    #[test]
+    fn test_builder() {
+        let r = ReservationBuilder::default().build().unwrap();
+        println!("{:?}", r);
+        let r = Reservation {
+            ..Default::default()
+        };
+        println!("{:?}", r);
     }
 }

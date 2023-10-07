@@ -1,11 +1,14 @@
 pub mod entities;
 
-mod error;
+pub mod error;
 mod manager;
 
 use async_trait::async_trait;
 use error::RsysError;
-use rsys_abi::{DateTimeOffset, QueryRequest, Reservation};
+use rsys_abi::{
+    CancelRequest, ConfirmRequest, DateTimeOffset, GetRequest, ListenRequest, QueryRequest,
+    Reservation, UpdateRequest,
+};
 use sea_orm::DatabaseConnection;
 use sqlx::{postgres::PgRow, FromRow, Row};
 
@@ -13,30 +16,35 @@ use sqlx::{postgres::PgRow, FromRow, Row};
 pub trait Rsvp {
     async fn create(&self, rsvp: Reservation) -> Result<Reservation, RsysError>;
 
-    async fn change_status(&self, id: &str) -> Result<Reservation, RsysError>;
+    async fn change_status(&self, change: ConfirmRequest) -> Result<Reservation, RsysError>;
 
-    async fn update_note(&self, id: &str, note: String) -> Result<Reservation, RsysError>;
+    async fn update_note(&self, update: UpdateRequest) -> Result<Reservation, RsysError>;
 
-    async fn delete(&self, id: &str) -> Result<usize, RsysError>;
+    async fn delete(&self, cancel: CancelRequest) -> Result<usize, RsysError>;
+
+    async fn get(&self, cancel: GetRequest) -> Result<Reservation, RsysError>;
 
     async fn query(&self, query: QueryRequest) -> Result<Vec<Reservation>, RsysError>;
+
+    async fn listen(&self, listen: ListenRequest) -> Result<Vec<Reservation>, RsysError>;
 }
 
 #[derive(Debug)]
 pub struct ReservationManager {
+    pub constr: String,
     db: DatabaseConnection,
 }
 
-impl Into<Reservation> for entities::reservations::Model {
-    fn into(self) -> Reservation {
+impl From<entities::reservations::Model> for Reservation {
+    fn from(val: entities::reservations::Model) -> Self {
         Reservation {
-            id: self.id.to_string(),
-            uid: self.user_id.unwrap_or_default(),
-            resource_id: self.resource_id.unwrap_or_default(),
-            note: self.note.unwrap_or_default(),
-            start: Some(DateTimeOffset(self.start_time.unwrap_or_default()).into()),
-            end: Some(DateTimeOffset(self.end_time.unwrap_or_default()).into()),
-            rstatus: self.r_status.unwrap_or_default(),
+            id: val.id.to_string(),
+            uid: val.user_id.unwrap_or_default(),
+            resource_id: val.resource_id.unwrap_or_default(),
+            note: val.note.unwrap_or_default(),
+            start: Some(DateTimeOffset(val.start_time.unwrap_or_default()).into()),
+            end: Some(DateTimeOffset(val.end_time.unwrap_or_default()).into()),
+            rstatus: val.r_status.unwrap_or_default(),
         }
     }
 }

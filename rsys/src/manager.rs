@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use rand::distributions::{Alphanumeric, Distribution};
-use rsys_abi::{convert_to_datetime, QueryRequest, Reservation};
+use rsys_abi::{
+    convert_to_datetime, CancelRequest, ConfirmRequest, GetRequest, ListenRequest, QueryRequest,
+    Reservation, UpdateRequest,
+};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, EntityTrait, QueryFilter, Set,
+    ActiveModelTrait, ActiveValue, ColumnTrait, Condition, Database, EntityTrait, QueryFilter, Set,
 };
 use sqlx::{types::Uuid, PgPool, Row};
 
@@ -12,6 +15,17 @@ use crate::{
 };
 
 impl ReservationManager {
+    pub async fn new(constr: String) -> Result<Self, RsysError> {
+        let con = Database::connect(constr.clone()).await;
+        if con.is_err() {
+            return Err(RsysError::ConfigError(constr));
+        }
+        Ok(ReservationManager {
+            constr,
+            db: con.unwrap(),
+        })
+    }
+
     pub async fn create_sqlx(
         mut rsvp: Reservation,
         pool: PgPool,
@@ -22,7 +36,7 @@ impl ReservationManager {
         )
         .bind(rsvp.uid.clone())
         .bind(rsvp.resource_id.clone())
-        .bind(rsvp.rstatus.clone())
+        .bind(rsvp.rstatus)
         .bind(convert_to_datetime(rsvp.start.clone().unwrap()))
         .bind(convert_to_datetime(rsvp.end.clone().unwrap()))
         .bind(rsvp.note.clone())
@@ -114,11 +128,11 @@ impl Rsvp for ReservationManager {
         Ok(_rsvp)
     }
 
-    async fn change_status(&self, id: &str) -> Result<Reservation, RsysError> {
+    async fn change_status(&self, change: ConfirmRequest) -> Result<Reservation, RsysError> {
         let mut result = Reservation {
             ..Default::default()
         };
-        if let Ok(id) = Uuid::parse_str(id) {
+        if let Ok(id) = Uuid::parse_str(change.id.as_str()) {
             let e = Reservations::find_by_id(id).one(&self.db).await?;
             let mut e: reservations::ActiveModel = e.unwrap().into();
             e.r_status = Set(Some(1));
@@ -131,11 +145,11 @@ impl Rsvp for ReservationManager {
         Ok(result)
     }
 
-    async fn update_note(&self, id: &str, note: String) -> Result<Reservation, RsysError> {
-        if let Ok(id) = Uuid::parse_str(id) {
+    async fn update_note(&self, update: UpdateRequest) -> Result<Reservation, RsysError> {
+        if let Ok(id) = Uuid::parse_str(update.id.as_str()) {
             let e = Reservations::find_by_id(id).one(&self.db).await?;
             let mut e: reservations::ActiveModel = e.unwrap().into();
-            e.note = Set(Some(note));
+            e.note = Set(Some(update.note));
             let r = e.update(&self.db).await?;
             return Ok(r.into());
         } else {
@@ -143,8 +157,18 @@ impl Rsvp for ReservationManager {
         }
     }
 
-    async fn delete(&self, id: &str) -> Result<usize, RsysError> {
-        if let Ok(id) = Uuid::parse_str(id) {
+    async fn get(&self, get: GetRequest) -> Result<Reservation, RsysError> {
+        if let Ok(id) = Uuid::parse_str(get.id.as_str()) {
+            let e = Reservations::find_by_id(id).one(&self.db).await?;
+            if let Some(r) = e {
+                return Ok(r.into());
+            }
+        }
+        return Err(RsysError::NoReservation);
+    }
+
+    async fn delete(&self, cancel: CancelRequest) -> Result<usize, RsysError> {
+        if let Ok(id) = Uuid::parse_str(cancel.id.as_str()) {
             let result = Reservations::delete_by_id(id).exec(&self.db).await?;
             return Ok(result.rows_affected as usize);
         }
@@ -152,6 +176,10 @@ impl Rsvp for ReservationManager {
     }
 
     async fn query(&self, _query: QueryRequest) -> Result<Vec<Reservation>, RsysError> {
+        todo!()
+    }
+
+    async fn listen(&self, _listen: ListenRequest) -> Result<Vec<Reservation>, RsysError> {
         todo!()
     }
 }
@@ -176,7 +204,7 @@ mod tests {
     use rand::prelude::*;
     use rsys_abi::convert_to_timestamp;
     use rsys_abi::Reservation;
-    use sea_orm::Database;
+    use rsys_abi::UpdateRequest;
     use sqlx::postgres::PgPoolOptions;
 
     #[test]
@@ -215,9 +243,7 @@ mod tests {
 
     #[tokio::test]
     async fn rm_queryx() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let result = rm
             .create(Reservation::new_pending(
                 generate_random_string(7),
@@ -245,9 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn rm_create() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
 
         for i in 1..11 {
             let result = rm
@@ -280,10 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn rm_create_single() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
-
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let result = rm
             .create(Reservation::new_pending(
                 generate_random_string(7),
@@ -303,9 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_already_booked() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let resource_id = "test_resource";
         let off = rand::thread_rng().gen_range(1..101);
         for _ in 0..2 {
@@ -332,9 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_change_status() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let off = rand::thread_rng().gen_range(1..101);
         let result = rm
             .create(Reservation {
@@ -355,18 +372,16 @@ mod tests {
             .await;
         if let Ok(data) = result {
             println!("{:?}", data);
-            let data = rm.change_status(data.id.as_str()).await;
+            let data = rm.change_status(data.id.into()).await;
             println!("{:?}", data);
-            let data = rm.change_status("data.id.as_str()").await;
+            let data = rm.change_status("data.id.as_str()".into()).await;
             println!("{:?}", data);
         }
     }
 
     #[tokio::test]
     async fn test_change_note() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let off = rand::thread_rng().gen_range(1..101);
         let result = rm
             .create(Reservation {
@@ -387,16 +402,19 @@ mod tests {
             .await;
         if let Ok(data) = result {
             println!("{:?}", data);
-            let data = rm.update_note(&data.id, generate_random_string(20)).await;
+            let data = rm
+                .update_note(UpdateRequest {
+                    id: data.id,
+                    note: generate_random_string(20),
+                })
+                .await;
             println!("{:?}", data);
         }
     }
 
     #[tokio::test]
     async fn test_delete() {
-        let rm: ReservationManager = ReservationManager {
-            db: Database::connect(env_con_str()).await.unwrap(),
-        };
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
         let off = rand::thread_rng().gen_range(1..101);
         let result = rm
             .create(Reservation {
@@ -417,7 +435,7 @@ mod tests {
             .await;
         if let Ok(data) = result {
             println!("{:?}", data);
-            println!("{:?}", rm.delete(data.id.as_str()).await);
+            println!("{:?}", rm.delete(data.id.into()).await);
         }
     }
 }

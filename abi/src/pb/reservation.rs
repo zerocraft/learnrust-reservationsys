@@ -1,19 +1,27 @@
+#[derive(derive_builder::Builder)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Reservation {
     #[prost(string, tag = "1")]
+    #[builder(setter(skip))]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    #[builder(default)]
     pub uid: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    #[builder(default)]
     pub resource_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    #[builder(default)]
     pub note: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
+    #[builder(default)]
     pub start: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "6")]
+    #[builder(default)]
     pub end: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(enumeration = "ReservationStatus", tag = "7")]
+    #[builder(default)]
     pub rstatus: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -31,8 +39,10 @@ pub struct ConfirmRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateRequest {
-    #[prost(message, optional, tag = "1")]
-    pub reservation: ::core::option::Option<Reservation>,
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub note: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -378,16 +388,18 @@ pub mod reservation_service_server {
             request: tonic::Request<super::GetRequest>,
         ) -> std::result::Result<tonic::Response<super::Reservation>, tonic::Status>;
         /// Server streaming response type for the query method.
-        type queryStream: futures_core::Stream<Item = std::result::Result<super::Reservation, tonic::Status>>
-            + Send
+        type queryStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::Reservation, tonic::Status>,
+            > + Send
             + 'static;
         async fn query(
             &self,
             request: tonic::Request<super::QueryRequest>,
         ) -> std::result::Result<tonic::Response<Self::queryStream>, tonic::Status>;
         /// Server streaming response type for the listen method.
-        type listenStream: futures_core::Stream<Item = std::result::Result<super::Reservation, tonic::Status>>
-            + Send
+        type listenStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::Reservation, tonic::Status>,
+            > + Send
             + 'static;
         async fn listen(
             &self,
@@ -481,7 +493,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::ReserveRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).reserve(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::reserve(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -519,7 +533,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::ConfirmRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).confirm(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::confirm(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -557,7 +573,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::UpdateRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).update(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::update(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -595,7 +613,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::CancelRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).cancel(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::cancel(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -633,7 +653,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::GetRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).get(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::get(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -675,7 +697,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::QueryRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).query(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::query(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -718,7 +742,9 @@ pub mod reservation_service_server {
                             request: tonic::Request<super::ListenRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).listen(request).await };
+                            let fut = async move {
+                                <T as ReservationService>::listen(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

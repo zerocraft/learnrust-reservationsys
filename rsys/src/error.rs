@@ -15,6 +15,10 @@ pub enum RsysError {
     AlreadyBooked,
     #[error("no reservation")]
     NoReservation,
+    #[error("config error: {0}")]
+    ConfigError(String),
+    #[error("server error: {0}")]
+    ServerError(String),
 }
 
 impl PartialEq for RsysError {
@@ -40,5 +44,20 @@ impl From<sqlx::Error> for RsysError {
             }
             _ => RsysError::DbxError(err),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::error::RsysError;
+
+    #[test]
+    fn debug_errors() {
+        let err = RsysError::Unknown;
+        println!("{:?}\n{}", err, err);
+        // to_string() 只读时使用，不会分配新的内存
+        // to_owned() 后续需要修改时使用，分配新的内存来存储新字符串
+        let err = RsysError::ConfigError("config".to_string());
+        println!("{:?}\n{}", err, err);
     }
 }
