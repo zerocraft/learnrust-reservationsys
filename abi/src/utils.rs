@@ -34,3 +34,18 @@ pub fn parse_datetime(s: &str) -> Result<DateTime<Utc>, ()> {
         })?
         .with_timezone(&Utc))
 }
+
+#[allow(unused_macros)]
+macro_rules! printlnn {
+    ($($arg:tt),+)=>{
+        $(println!($arg);)+
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn macro_test() {
+        printlnn!("1", "2", "3", "4", "5", "6", "7");
+    }
+}

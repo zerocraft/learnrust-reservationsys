@@ -1,16 +1,19 @@
 pub mod entities;
-
 pub mod error;
 mod manager;
 
 use async_trait::async_trait;
-use error::RsysError;
+use chrono::{Duration, Utc};
+use error::*;
+use rand::Rng;
+use rand_distr::{Alphanumeric, Distribution};
 use rsys_abi::{
     CancelRequest, ConfirmRequest, DateTimeOffset, GetRequest, ListenRequest, QueryRequest,
     Reservation, UpdateRequest,
 };
 use sea_orm::DatabaseConnection;
 use sqlx::{postgres::PgRow, FromRow, Row};
+use tokio::sync::mpsc::Receiver;
 
 #[async_trait]
 pub trait Rsvp {
@@ -24,7 +27,7 @@ pub trait Rsvp {
 
     async fn get(&self, cancel: GetRequest) -> Result<Reservation, RsysError>;
 
-    async fn query(&self, query: QueryRequest) -> Result<Vec<Reservation>, RsysError>;
+    async fn query(&self, query: QueryRequest) -> Receiver<Result<Reservation, RsysError>>;
 
     async fn listen(&self, listen: ListenRequest) -> Result<Vec<Reservation>, RsysError>;
 }
@@ -65,6 +68,29 @@ impl FromRow<'_, PgRow> for entities::reservations::Model {
 
 pub fn env_con_str() -> String {
     dotenvy::var("DATABASE_URL").unwrap()
+}
+
+pub fn generate_random_string(length: usize) -> String {
+    Alphanumeric
+        .sample_iter(&mut rand::thread_rng())
+        .take(length)
+        .map(char::from)
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn generate_random_reservation() -> Reservation {
+    Reservation::new_pending(
+        generate_random_string(7),
+        generate_random_string(8),
+        generate_random_string(11),
+        Utc::now()
+            .checked_add_signed(Duration::hours(rand::thread_rng().gen_range(1..101)))
+            .unwrap(),
+        Utc::now()
+            .checked_add_signed(Duration::hours(rand::thread_rng().gen_range(-101..-1)))
+            .unwrap(),
+    )
 }
 
 #[cfg(test)]

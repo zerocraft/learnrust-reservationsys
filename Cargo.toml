@@ -1,3 +1,3 @@
 [workspace]
-members = ["abi", "rsys", "rsys/migration", "servi"]
+members = ["abi", "rsys", "rsys/migration", "servi", "sqlx_tester"]
 resolver = "2"

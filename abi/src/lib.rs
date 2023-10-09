@@ -1,5 +1,5 @@
 mod pb;
-mod utils;
+pub mod utils;
 
 use chrono::{DateTime, Utc};
 pub use pb::*;

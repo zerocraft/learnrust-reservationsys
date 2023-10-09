@@ -47,6 +47,12 @@ impl From<sqlx::Error> for RsysError {
     }
 }
 
+// impl From<sea_orm::DbErr> for RsysError {
+//     fn from(value: sea_orm::DbErr) -> Self {
+//         RsysError::DbError(value)
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use crate::error::RsysError;

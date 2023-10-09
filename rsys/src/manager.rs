@@ -1,5 +1,9 @@
+use crate::{
+    entities::prelude::Reservations, entities::reservations, error::RsysError, ReservationManager,
+    Rsvp,
+};
 use async_trait::async_trait;
-use rand::distributions::{Alphanumeric, Distribution};
+use futures::StreamExt;
 use rsys_abi::{
     convert_to_datetime, CancelRequest, ConfirmRequest, GetRequest, ListenRequest, QueryRequest,
     Reservation, UpdateRequest,
@@ -8,11 +12,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, Condition, Database, EntityTrait, QueryFilter, Set,
 };
 use sqlx::{types::Uuid, PgPool, Row};
-
-use crate::{
-    entities::prelude::Reservations, entities::reservations, error::RsysError, ReservationManager,
-    Rsvp,
-};
+use tokio::sync::mpsc::{self, Receiver};
 
 impl ReservationManager {
     pub async fn new(constr: String) -> Result<Self, RsysError> {
@@ -70,6 +70,30 @@ impl ReservationManager {
                 .fetch_one(&pool)
                 .await?;
         Ok(result)
+    }
+
+    pub async fn query_many_sqlx(
+        uid: &str,
+        pool: PgPool,
+    ) -> Result<mpsc::Receiver<reservations::Model>, RsysError> {
+        let uid = uid.to_string();
+        let (tx, rx) = mpsc::channel::<reservations::Model>(128);
+        tokio::spawn(async move {
+            let mut rsvps = sqlx::query_as("select * from rsvp.reservations where user_id = $1")
+                .bind(uid)
+                .fetch_many(&pool);
+            while let Some(Ok(ret)) = rsvps.next().await {
+                match ret {
+                    sqlx::Either::Left(_) => {}
+                    sqlx::Either::Right(r) => {
+                        if tx.send(r).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        Ok(rx)
     }
 }
 
@@ -175,8 +199,32 @@ impl Rsvp for ReservationManager {
         Ok(0)
     }
 
-    async fn query(&self, _query: QueryRequest) -> Result<Vec<Reservation>, RsysError> {
-        todo!()
+    async fn query(&self, _query: QueryRequest) -> Receiver<Result<Reservation, RsysError>> {
+        let uid = _query.uid;
+        let result = Reservations::find()
+            .filter(reservations::Column::UserId.eq(uid))
+            .stream(&self.db)
+            .await;
+        let mut result = result.unwrap();
+        let (tx, rx) = mpsc::channel::<Result<Reservation, RsysError>>(128);
+        loop {
+            let i = result.next().await;
+            if i.is_none() {
+                break;
+            }
+            match i.unwrap() {
+                Ok(item) => {
+                    if tx.send(Ok(item.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    let _ = tx.send(Err(RsysError::DbError(err))).await;
+                    break;
+                }
+            }
+        }
+        rx
     }
 
     async fn listen(&self, _listen: ListenRequest) -> Result<Vec<Reservation>, RsysError> {
@@ -184,25 +232,18 @@ impl Rsvp for ReservationManager {
     }
 }
 
-#[allow(dead_code)]
-pub fn generate_random_string(length: usize) -> String {
-    Alphanumeric
-        .sample_iter(&mut rand::thread_rng())
-        .take(length)
-        .map(char::from)
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::generate_random_string;
     use crate::env_con_str;
+    use crate::generate_random_reservation;
+    use crate::generate_random_string;
     use crate::ReservationManager;
     use crate::Rsvp;
     use chrono::Duration;
     use chrono::Utc;
     use rand::prelude::*;
     use rsys_abi::convert_to_timestamp;
+    use rsys_abi::QueryRequest;
     use rsys_abi::Reservation;
     use rsys_abi::UpdateRequest;
     use sqlx::postgres::PgPoolOptions;
@@ -270,6 +311,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rm_query_manyx() {
+        let uid = "rm_query_manyx";
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
+        for _ in 0..5 {
+            let mut r = generate_random_reservation();
+            r.uid = uid.to_string();
+            let _ = rm.create(r).await;
+        }
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(env_con_str().as_str())
+            .await
+            .unwrap();
+        let mut result = ReservationManager::query_many_sqlx(uid, pool)
+            .await
+            .unwrap();
+        while let Some(r) = result.recv().await {
+            println!("{:?}", r);
+        }
+    }
+
+    #[tokio::test]
+    async fn rm_query_many() {
+        let uid = "rm_query_manyx";
+        let rm = ReservationManager::new(env_con_str()).await.unwrap();
+        let mut result = rm
+            .query(QueryRequest {
+                uid: uid.to_string(),
+            })
+            .await;
+        while let Some(i) = result.recv().await {
+            println!("{:?}", i);
+        }
+    }
+
+    #[tokio::test]
     async fn rm_create() {
         let rm = ReservationManager::new(env_con_str()).await.unwrap();
 
@@ -305,19 +382,7 @@ mod tests {
     #[tokio::test]
     async fn rm_create_single() {
         let rm = ReservationManager::new(env_con_str()).await.unwrap();
-        let result = rm
-            .create(Reservation::new_pending(
-                generate_random_string(7),
-                generate_random_string(8),
-                generate_random_string(11),
-                Utc::now()
-                    .checked_add_signed(Duration::hours(rand::thread_rng().gen_range(1..101)))
-                    .unwrap(),
-                Utc::now()
-                    .checked_add_signed(Duration::hours(rand::thread_rng().gen_range(-101..-1)))
-                    .unwrap(),
-            ))
-            .await;
+        let result = rm.create(generate_random_reservation()).await;
         let result = result.unwrap();
         println!("{:?} {:?}", result.id, result.uid);
     }
