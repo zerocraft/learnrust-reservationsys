@@ -205,6 +205,7 @@ impl Rsvp for ReservationManager {
             .filter(reservations::Column::UserId.eq(uid))
             .stream(&self.db)
             .await;
+
         let mut result = result.unwrap();
         let (tx, rx) = mpsc::channel::<Result<Reservation, RsysError>>(128);
         loop {

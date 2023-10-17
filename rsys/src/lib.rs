@@ -99,9 +99,13 @@ mod tests {
     use crate::entities::reservations;
     use crate::env_con_str;
     use sea_orm::ActiveModelTrait;
+    use sea_orm::ConnectionTrait;
+    use sea_orm::CursorTrait;
     use sea_orm::Database;
     use sea_orm::EntityTrait;
+    use sea_orm::FromQueryResult;
     use sea_orm::ModelTrait;
+    use sea_orm::QueryOrder;
     use sea_orm::Set;
 
     #[tokio::test]
@@ -151,6 +155,31 @@ mod tests {
         if let Some(r) = r {
             let _r = r.delete(db).await;
             println!("{:?}", _r.unwrap());
+        }
+    }
+
+    #[tokio::test]
+    async fn orm_test_pagination() {
+        let db = &Database::connect(env_con_str()).await.unwrap();
+        let mut cursor = Reservations::find().cursor_by(reservations::Column::Id);
+        let result = cursor.first(6).all(db).await;
+        if result.is_ok() {
+            for r in result.unwrap() {
+                println!("{:?}", r);
+            }
+        }
+        let query = db.get_database_backend().build(
+            Reservations::find()
+                .order_by_asc(reservations::Column::Id)
+                .query()
+                .limit(3)
+                .offset(3),
+        );
+        let result = reservations::Model::find_by_statement(query).all(db).await;
+        if result.is_ok() {
+            for r in result.unwrap() {
+                println!("{:?}", r);
+            }
         }
     }
 }
